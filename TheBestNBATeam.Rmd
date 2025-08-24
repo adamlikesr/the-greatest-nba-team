@@ -1,0 +1,546 @@
+---
+title: "Making the Greatest NBA Team (Statistically)"
+author: "Adam Estrellado"
+date: "2025-08-21"
+output: html_document
+---
+
+# Introduction
+
+Basketball lovers all have their dream starting lineup, but what is the statistically best starting five ever?
+
+Let's dig through some data to find out.
+
+Here I loaded a NBA player database that contains the stats of every NBA player who ever step foot on the court.
+
+```{r}
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+
+nbaData <- read_csv("/Users/adamestrellado/Downloads/PlayerIndex_nba_stats.csv", 
+                    show_col_types = FALSE)
+```
+
+```{r}
+head(nbaData)
+```
+
+This data gives us quite a lot of info, but we really only need some key variables.
+
+This includes the player names, height, game stats, and their position.
+
+Here I used dplyr to take out everything we need.
+
+```{r}
+topPlayers <- nbaData %>% 
+  
+  transmute (
+    points = PTS,
+    rebounds = REB,
+    assists = AST,
+    player = PLAYER_SLUG,
+    position = POSITION,
+    height = HEIGHT,
+    yearsActive = as.integer(TO_YEAR - FROM_YEAR)
+  ) %>% 
+  
+  filter(yearsActive > 2)
+
+head(topPlayers)
+
+```
+Now our data is ready to go.
+
+Important note, I included a new column called yearsActive that gives us only players who have played three seasons or more - This way we can avoid including any players who might had outstanding performances but only for a short period of time, we want some longevity!
+
+
+# Choosing a Point Guard
+
+Next we need to build our team, lets start with our point guard. I want our floor general to have a good mix of both scoring and assists, so here I gathered all of the point guards with generally high scoring ability and assists.
+
+```{r}
+# Selects the top guards in assists and points
+bestGuards <- topPlayers %>%
+  filter(grepl("G", position),
+         points > 19,
+         assists > 6)
+
+# Creates a vector of the player names so  %in% can highlight them
+bestGuardsNames <- bestGuards$player
+
+# Creates a new dataframe with all the guards, and highlights the top players
+allGuards <- topPlayers %>% 
+  filter(grepl("G", position)) %>% 
+  mutate(keyPlayer = ifelse(
+    player %in% bestGuardsNames, "Highlighted", "Scrub")
+)
+
+
+pointGuardPlot <- ggplot(allGuards,
+       aes(x = assists,
+           y = points,
+           color = keyPlayer)
+       ) +
+  
+  geom_point(
+    size = 2, alpha = 0.5) +
+  
+  scale_color_manual(
+    values = c("Highlighted" = "red", "Scrub" = "grey")) +
+  
+  labs(
+    x = "Average Assists",
+    y = "Average Points",
+    title = "Top Guards in Points and Assists"
+  )
+  
+  pointGuardPlot + theme_calc() +
+    
+  theme(legend.position = "none")
+  
+  
+```
+
+Highlighted in red are the top scoring guards in both points per game and assists. As I said earlier, we want someone with a good balance in both.
+
+Quick side note, some of the players in this data set have played multiple positions, so I have included all players who have played as a guard at least once.
+
+So who are these shooters? Lets take a look:
+
+```{r}
+ggplot(bestGuards,
+  aes(x = assists,
+      y = points,
+      label = player,
+      alpha = 0.5)
+  ) +
+  
+  geom_point(size = 3) +
+
+  geom_text_repel(size = 3) +
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+Looking at this plot we can determine the different flavors of top tier guards.
+
+Some guards seem to score more often, players like SGA have extremely high scoring ability but pass the ball less.
+
+```{r echo=FALSE}
+ggplot(bestGuards,
+  aes(x = assists,
+      y = points,
+      label = player)
+  ) +
+  
+  geom_point(size = 3,
+             color = "grey") +
+  geom_text_repel(size = 3) +
+  
+  geom_point(
+    data = subset(bestGuards, bestGuardsNames == "shai-gilgeous-alexander"),
+    color = "orange"
+    ) +
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+Other players like Magic Johnson have above average scoring but outstanding assist numbers.
+
+```{r echo=FALSE}
+ggplot(bestGuards,
+  aes(x = assists,
+      y = points,
+      label = player)
+  ) +
+  
+  geom_point(size = 3,
+             color = "grey") +
+  geom_text_repel(size = 3) +
+  
+  geom_point(
+    data = subset(bestGuards, bestGuardsNames == "magic-johnson"),
+    color = "purple"
+    ) +
+  
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+For our team, we want our point guard to have an excellent passing ability, that way we can give most of the high scoring power to our shooting guard.
+
+Surprisingly, the best choice statistically would actually be *Trae Young*, who offers more assists than Magic Johnson while still offering a solid scoring average of 24.2 points per game.
+
+Now that we have chosen our first pick, lets move on to our other players!
+
+
+# Choosing a Shooting Guard
+
+We will follow a very similar method choosing our shooting guard as we did with our point guard, but this time I want to emphasize the scoring aspect of the position.
+
+Lets extract the top scoring guards from the data set.
+
+```{r}
+# Extracts guards who average over 28 points.
+bestShooters <- topPlayers %>% 
+  filter(grepl("G", position),
+         points > 28)
+
+bestShooters
+```
+
+The results are pretty interesting, filtering for guards who average over 28 points we get three players, Luka Doncic, SGA, and Michael Jordan - all the same height!
+
+They all average unusually high points per game, so our choice will depend on their other stats. Lets take a look at the median rebounds and assists for the top guard players.
+
+
+```{r}
+# Finds the median rebounds and assists of all guard players
+assistsRebounds <- bestGuards %>%  
+  summarise(medianRebounds = median(rebounds, na.rm = TRUE),
+            medianAssists = median(assists, na.rm = TRUE))
+
+assistsRebounds
+```
+
+Comparing our player's rebounding and assists to these medians, we can see that Luka has above average assists and excellent rebounding, all while maintaining the third highest points per game out of every guard in NBA history.
+
+Not too bad.
+
+```{r}
+bestShooters %>%
+  
+  filter(player == "luka-dončić") %>% 
+  transmute(assistsRebounds,
+            rebounds,
+            assists,
+            player)
+```
+
+I'm sold! We will take *Luka Doncic* as our shooting guard.
+
+
+## Sorting Power Forwards and Small Forwards
+
+In this data set, much like the point guard and shooting guard, the position of small forwards and power forwards are combined into one category "F".
+
+Let's start by sorting them into small forward and power forward categories. We can group them by height, as generally, while not entirely accurate, small forwards tend to be smaller in height whereas power forwards are closer to the height of the center.
+
+First we must convert the height into numerical values as they are stored as strings in the data set.
+
+```{r}
+# Extracts all forwards, converts height into numerical value
+forwards <- topPlayers %>%
+  filter(grepl("F", position)) %>% 
+  separate(height, into = c("feet", "inches"), sep = "-", convert = TRUE) %>% 
+  mutate(height_ft = feet + (inches / 12))
+```
+```{r}
+
+forwards <- forwards %>% 
+  transmute(player, height_ft, position, points, rebounds, assists)
+forwards
+```
+
+Now that we have our heights converted into numbers, we can sort our list of forwards. Any player that is under the height of 6'8" will be labeled as a small forward, while everyone else will be labeled as a power forward.
+
+```{r}
+# Sorts forwards into SF and PF
+forwards <- forwards %>% 
+  mutate(position = ifelse(height_ft < 6.6, "SF", "PF"))
+
+forwards
+```
+
+
+
+By sorting this way, there will be many cases where a player is assigned to a position that is different to their *actual* position in real life. For example, a player like Draymond Green would be sorted into the small forward position due to his smaller height, but in real life Draymond Green is a power forward.
+
+In the modern NBA, positions have evolved to become a lot more fluid, especially between forwards, so this shouldn't affect our dream team too much.
+
+# Choosing a Small Forward
+
+Now that we have cleaned up the data a bit, it's time to pick our SF. I'm looking for players who can shoot while also being able to kick the ball out to the guards, or pass to my center and power forward to get some points in the paint.
+
+Just like our point guard, lets look at the top scoring and assisting small forwards.
+
+```{r}
+# Extract outstanding forwards
+bestForwards <- forwards %>% 
+  filter(points > 15,
+         assists > 5)
+
+bestForwardsName = bestForwards$player
+
+forwards <- forwards %>% 
+  mutate(keyPlayers = ifelse(player %in% bestForwardsName, "Highlighted", "Scrub"))
+
+smallForwards <- forwards %>% 
+  filter(position == "SF") %>% 
+  mutate(keyPlayers = ifelse(player %in% bestForwardsName, "Highlighted", "Scrub"))
+
+bestSmallForwards <- bestForwards %>% 
+  filter(position == "SF")
+
+
+ggplot(forwards, aes(
+  x = assists,
+  y = points,
+  color = keyPlayers)
+  ) +
+  
+  scale_color_manual(
+    values = c("Highlighted" = "purple", "Scrub" = "grey")
+  ) +
+  
+  geom_point(alpha = 0.5) +
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+This plot shows all of the forwards in the dataset, lets narrow it down to the small forwards only.
+
+```{r}
+ggplot(smallForwards, aes(
+  x = assists,
+  y = points,
+  color = keyPlayers)
+  ) +
+  
+  scale_color_manual(
+    values = c("Highlighted" = "orange", "Scrub" = "grey")
+  ) +
+  
+  geom_point(alpha = 0.8) +
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(bestSmallForwards,
+       aes(x = assists,
+           y = points,
+           label = player)
+       ) +
+  
+  geom_point(size = 3, alpha = 0.5) +
+  
+  geom_text_repel(size = 3) +
+  
+  labs(x = "Average Assists", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+Once again, Luka appears as an outlier with high scoring power and assists.
+
+Since we already chose him as our shooting guard, lets look at our other choices. Scoring well above average is Zion Williamson, with a very solid average of 5.3 assists. Coming with a nice addition of 7.2 rebounds, statistically *Zion* is a easy pick!
+
+```{r}
+zionWilliamson <- bestForwards %>% 
+  filter(player == "zion-williamson")
+
+zionWilliamson
+```
+
+# Choosing a Power Forward
+
+Now for our second wing player. The larger counterpart to the small forward, a good power forward should have a high rebounding probability and some decent points, lets plot our power forwards and see who meets these requirements.
+
+```{r}
+powerForwards <- forwards %>% 
+  filter(position == "PF")
+
+bestPowerForwards <- powerForwards %>% 
+  filter(points > 15,
+         rebounds > 10)
+
+bestPowerForwardsNames <- bestPowerForwards$player
+
+powerForwards <- powerForwards %>%  
+  mutate(keyPlayers = ifelse(player %in% bestPowerForwardsNames, 
+                             "Highlighted", "Scrub"))
+
+
+ggplot(powerForwards, aes(
+  x = rebounds,
+  y = points,
+  color = keyPlayers)
+  ) +
+  
+  scale_color_manual(
+    values = c("Highlighted" = "green", "Scrub" = "grey")
+  ) +
+  
+  geom_point(alpha = 0.8) +
+  
+  labs(x = "Average Rebounds", y = "Average Points") +
+  
+  theme_calc() +
+  
+  theme(legend.position = "none")
+```
+
+Highlighted in green are our top candidates for this position, lets zoom in and take a look.
+
+```{r}
+ggplot(bestPowerForwards,
+       aes(
+         x = rebounds,
+         y = points,
+         label = player)
+       ) +
+ 
+   geom_point(size = 5, alpha = 0.5) +
+  
+   geom_text_repel(size = 3) +
+  
+   labs(x = "Average Rebounds", y = "Average Points") +
+  
+   theme_calc() +
+  
+   theme(legend.position = "none")
+```
+
+After plotting this we get a closer look at our picks. Funny enough, *Bob Pettit* is the best candidate for our PF using this standard.
+
+```{r}
+bobPettit <- powerForwards %>% 
+  filter(rebounds > 16)
+
+forwards_cleaned <- forwards %>% 
+  filter(!is.na(rebounds), !is.na(points))
+  
+ggplot(forwards_cleaned, aes(
+  x = rebounds,
+  y = points )
+  ) +
+  
+  geom_point(alpha = 0.5, color = "grey") +
+  
+  geom_point(data = bobPettit, aes(
+    x = rebounds,
+    y = points),
+    color = "red"
+  ) +
+  
+  geom_text(
+    data = bobPettit,
+    aes(label = player),
+        vjust = -1,
+        hjust = 1
+  ) +
+  
+   labs(x = "Average Rebounds", y = "Average Points") +
+  
+   theme_calc() +
+  
+   theme(legend.position = "none")
+```
+
+Bob Pettit played on the Atlanta Hawks from 1954 to 1965 and absolutely smokes the league in rebounds for forwards, leading with 16.2 rebounds per game.
+
+He was also the first recipient of the NBA's MVP award, and even against modern players, Bob still stands out as a top rebounder.
+
+## Choosing a Center
+
+Almost there! Finding the criteria for our center will be a little tricky as this data set does not include any defensive stats like blocks or steals.
+
+The center position has also branched out into different styles of play. Some players are more point focused whereas others are defensive walls.
+
+For this reason I think it is wise to look through multiple variables for our canidate.
+
+```{r}
+centers <- topPlayers %>% 
+  filter(grepl("C", position))
+
+topCenter <- centers %>% 
+  filter(points > 20, rebounds > 8, assists > 8)
+
+topCenterNames <- topCenter$player
+
+
+ggplot(centers,
+       aes(x = assists,
+           y = points,
+           color = rebounds)
+) +
+  
+geom_point() +
+
+labs(x = "Average Assists", y = "Average Points") +
+  
+theme_calc()
+```
+
+Here I plotted every NBA center with three variables, average assists on x axis, average points on the y axis, and average rebounds as the color. The lighter the shade of blue, the more rebounds the player averages.
+
+There are two players I am interested in, both of which average above or close to 30 points per game, and have either high rebounding power or assists.
+
+```{r}
+player1 <- centers %>% 
+  filter(assists > 10)
+
+player2 <- centers %>% 
+  filter(points > 30)
+
+ggplot(centers,
+       aes(x = assists,
+           y = points,
+           color = rebounds)
+) +
+  
+geom_point() +
+  
+geom_text(data = player1, aes(label = player), vjust = -1, hjust = 1.2) +
+  
+geom_text(data = player2, aes(label = player), vjust = 2, hjust = 1) +
+
+labs(x = "Average Assists", y = "Average Points") +
+  
+theme_calc()
+```
+
+Unsurprisingly, we get two of the most dominant centers in NBA history. Both Wilt Chamberlain and Nikola Jokic have mind blowing scoring stats, leaving every other center in the dust.
+
+So what's more important? A high rebounder like Wilt, or an assist specialist like Jokic?
+
+As you can recall, we selected our power forward with the idea that they would have an extremely high rebounding rate, which we succeeded at. Given the scoring power and assists, I think our best choice (and it's pretty close) is *Nikola Jokic*
+
+# Conclusion
+
+We did it! Using data I picked the statistically best starting five in NBA history.
+
+```{r}
+startingFive <- topPlayers %>% 
+  filter(player %in% c("trae-young", "luka-dončić", "zion-williamson", "bob-pettit", "nikola-jokić"))
+
+startingFive
+```
+
+Although this team might perform well statistically, there is a reason that most people's starting five doesn't include Bob Pettit or Trae Young. There are many variables that this data does not reflect, variables like team morale, fitness, age, and health.
+
+Making this was super fun! But our results should be a reminder that data with rudimentary variables isn't always reflective of reality. Thank you for stopping by!
